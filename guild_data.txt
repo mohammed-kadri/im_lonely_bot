@@ -1,0 +1,6 @@
+Guild: _devshot's server (ID: 1336731836596093078)
+Text Channels:
+  - general (ID: 1336731836596093081)
+Voice Channels:
+  - General (ID: 1336731836596093082)
+--------------------

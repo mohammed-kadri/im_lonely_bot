@@ -1,0 +1,17 @@
+{
+    "1336731836596093078": {
+        "name": "_devshot's server",
+        "text_channels": [
+            {
+                "name": "general",
+                "id": 1336731836596093081
+            }
+        ],
+        "voice_channels": [
+            {
+                "name": "General",
+                "id": 1336731836596093082
+            }
+        ]
+    }
+}
