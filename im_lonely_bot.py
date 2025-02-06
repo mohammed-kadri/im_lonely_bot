@@ -87,11 +87,23 @@ async def on_voice_state_update(member, before, after):
         members_in_channel = voice_channel.members
 
         if len(members_in_channel) == 1:  # Check if the user is alone
-            notification_channel = client.get_channel(1336731836596093081)
-            if notification_channel:
+            notification_channel = None
+            try:
+                with open("guild_data.json", "r") as file:
+                    guild_data = json.load(file)
+                    server_id = str(member.guild.id)
+                    notification_channel_id = guild_data[server_id]["notifications_channel_id"]
+                    notification_channel = client.get_channel(notification_channel_id)
+
+            except FileNotFoundError:
+                await interaction.response.send_message(
+                    "The guild data file does not exist. Please run the bot to generate it.", ephemeral=True)
+                return
+
+            if notification_channel is not None:
                 await notification_channel.send(f"{member.mention} has joined {voice_channel.name} and is all alone! 🥺")
             else:
-                print(f"Error: Notification channel with ID {1336731836596093081} not found.")
+                print(f"Error: Notification channel is not set yet, please se it using the /set_notifications_channel command")
 
 
 # Slash command to get a channel ID by its name
@@ -226,6 +238,9 @@ async def on_guild_remove(guild):  # The crucial addition: on_guild_remove
     else:
         print(f"No data found for guild: {guild.name} (ID: {guild.id})")
 
+
+
+#
 
 # Run the bot
 client.run("Token")
