@@ -3,6 +3,9 @@ import json
 from discord import app_commands
 from discord.ext import commands
 
+# update notification room when a channel is deleted ✅
+# check notification room when the bot is rebooted ✅
+
 # TOKEN = os.environ.get("DISCORD_TOKEN")  # Get token from environment variable
 # NOTIFICATION_CHANNEL_ID = int(os.environ.get("1313426792295563295"))
 
@@ -36,47 +39,61 @@ async def save_guild_data(guild_data):
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
 
-    # Create a dictionary to store guild data
-    guild_data = {}
+    guild_data = load_guild_data()
 
-    for guild in client.guilds:  # Iterate through all the guilds the bot is in
-        guild_info = {
-            "name": guild.name,
-            "notifications_channel_id": "",
-            "text_channels": [],
-            "voice_channels": []
-        }
+    for guild in client.guilds:
+        guild_id = str(guild.id)
 
-        # Add text channels
-        for channel in guild.text_channels:
-            guild_info["text_channels"].append({
-                "name": channel.name,
-                "id": channel.id
-            })
+        if guild_id not in guild_data:
+            # Add new guild data (same as before)
+            guild_info = {
+                "name": guild.name,
+                "notifications_channel_id": None,
+                "text_channels": [],
+                "voice_channels": []
+            }
 
-        # Add voice channels
-        for channel in guild.voice_channels:
-            guild_info["voice_channels"].append({
-                "name": channel.name,
-                "id": channel.id
-            })
+            for channel in guild.text_channels:
+                guild_info["text_channels"].append({"name": channel.name, "id": channel.id})
 
-        # Add guild info to the main dictionary, using the guild ID as the key
-        guild_data[str(guild.id)] = guild_info
+            for channel in guild.voice_channels:
+                guild_info["voice_channels"].append({"name": channel.name, "id": channel.id})
 
-    # Save the data to a JSON file
-    with open("guild_data.json", "w") as file:
-        json.dump(guild_data, file, indent=4)  # Use indent for pretty-printing
+            guild_data[str(guild.id)] = guild_info
+            print(f"Added data for {guild.name}")  # Indicate new guild data
+        else:  # Update existing guild data if needed
+            saved_text_channels = {c['id']: c['name'] for c in guild_data[guild_id]['text_channels']}
+            saved_voice_channels = {c['id']: c['name'] for c in guild_data[guild_id]['voice_channels']}
 
-    print("Data has been saved to guild_data.json")
+            current_text_channels = {c.id: c.name for c in guild.text_channels}
+            current_voice_channels = {c.id: c.name for c in guild.voice_channels}
 
-    # Sync slash commands
+            if saved_text_channels != current_text_channels or saved_voice_channels != current_voice_channels:
+                # await _update_channel_lists(guild)
+                guild_id = str(guild.id)
+
+                if guild_data[guild_id]["notifications_channel_id"] not in current_text_channels:
+                    guild_data[guild_id]["notifications_channel_id"] = None
+
+                # Update text channels
+                guild_data[guild_id]["text_channels"] = [
+                    {"name": channel.name, "id": channel.id} for channel in guild.text_channels
+                ]
+
+                # Update voice channels
+                guild_data[guild_id]["voice_channels"] = [
+                    {"name": channel.name, "id": channel.id} for channel in guild.voice_channels
+                ]
+                print(f"Channel lists updated for guild {guild.name}")
+
+    await save_guild_data(guild_data)
+    print("Data has been loaded/synced to guild_data.json")
+
     try:
         synced = await client.tree.sync()
         print(f"Synced {len(synced)} command(s).")
     except Exception as e:
         print(f"Failed to sync commands: {e}")
-
 
 
 
@@ -86,8 +103,9 @@ async def on_voice_state_update(member, before, after):
         voice_channel = after.channel
         members_in_channel = voice_channel.members
 
-        if len(members_in_channel) == 1:  # Check if the user is alone
+        if len(members_in_channel) == 1 :  # Check if the user is alone
             notification_channel = None
+            guild_id = ""
             try:
                 with open("guild_data.json", "r") as file:
                     guild_data = json.load(file)
@@ -100,7 +118,7 @@ async def on_voice_state_update(member, before, after):
                     "The guild data file does not exist. Please run the bot to generate it.", ephemeral=True)
                 return
 
-            if notification_channel is not None:
+            if notification_channel is not None and member.id not in guild_data[server_id].get("excluded_users", []):
                 await notification_channel.send(f"{member.mention} has joined {voice_channel.name} and is all alone! 🥺")
             else:
                 print(f"Error: Notification channel is not set yet, please se it using the /set_notifications_channel command")
@@ -163,7 +181,7 @@ async def _load_and_sync_data(): # New function to load and sync data
     for guild in client.guilds:
         if str(guild.id) not in guild_data:
             await _add_guild_data(guild, guild_data) # Call function to add data
-    save_guild_data(guild_data)
+    await save_guild_data(guild_data)
     print("Data has been loaded/synced to guild_data.json")
 
 
@@ -216,6 +234,10 @@ async def on_guild_channel_delete(channel):
     guild = channel.guild
     await _update_channel_lists(guild)
     print(f"Channel '{channel.name}' deleted in guild '{guild.name}'. Channel lists updated.")
+    if channel.id == load_guild_data().get(str(guild.id), {}).get("notifications_channel_id"):
+        new_data = load_guild_data()
+        new_data[str(guild.id)]["notifications_channel_id"] = None
+        await save_guild_data(new_data)
 
 
 
@@ -240,7 +262,47 @@ async def on_guild_remove(guild):  # The crucial addition: on_guild_remove
 
 
 
-#
+@client.tree.command(name="exclude_user", description="Exclude a user from alone notifications.")
+@app_commands.describe(user="The user to exclude.")
+async def exclude_user(interaction: discord.Interaction, user: discord.Member):
+    guild_data = load_guild_data()
+    guild_id = str(interaction.guild.id)
+
+    if guild_id not in guild_data:
+        guild_data[guild_id] = {}  # Create guild data if it doesn't exist
+
+    if "excluded_users" not in guild_data[guild_id]:
+        guild_data[guild_id]["excluded_users"] = []
+
+    if user.id not in guild_data[guild_id]["excluded_users"]:
+        guild_data[guild_id]["excluded_users"].append(user.id)
+        await save_guild_data(guild_data)
+        await interaction.response.send_message(f"{user.mention} will no longer trigger alone notifications in this server.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"{user.mention} is already excluded in this server.", ephemeral=True)
+
+
+
+@client.tree.command(name="include_user", description="Include a user in alone notifications.")
+@app_commands.describe(user="The user to include.")
+async def include_user(interaction: discord.Interaction, user: discord.Member):
+    guild_data = load_guild_data()
+    guild_id = str(interaction.guild.id)
+
+    if guild_id in guild_data and "excluded_users" in guild_data[guild_id]:
+        if user.id in guild_data[guild_id]["excluded_users"]:
+            guild_data[guild_id]["excluded_users"].remove(user.id)
+            await save_guild_data(guild_data)
+            await interaction.response.send_message(f"{user.mention} will now trigger alone notifications in this server.", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"{user.mention} is not currently excluded in this server.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"No excluded users found for this server.", ephemeral=True)
+
+
+
+
+
 
 # Run the bot
 client.run("Token")
