@@ -1,9 +1,15 @@
 import discord
 import json
+import asyncio
 from discord import app_commands
 from discord.ext import commands
 
+# set time before sensing notification
+# try saving data in local noSQL database instead of json
 notification_channels = {}
+alone_timers = {}  # Dictionary to store timers for alone users
+
+
 DEFAULT_CHANNEL_NAME = "general"  # Set the default channel name
 
 intents = discord.Intents.default()
@@ -113,35 +119,62 @@ async def on_ready():
 
 
 
+
 @client.event
 async def on_voice_state_update(member, before, after):
     guild_data = load_guild_data()
     guild_id = str(member.guild.id)
 
-    if guild_id in guild_data and not guild_data[guild_id].get("notifications_paused", False):  # Check notifications paused
-        if before.channel is None and after.channel is not None:
+    if guild_id in guild_data and not guild_data[guild_id].get("notifications_paused", False):
+        if before.channel is None and after.channel is not None:  # User joined a voice channel
             voice_channel = after.channel
             members_in_channel = voice_channel.members
 
-            if len(members_in_channel) == 1:
-                notification_channel = None
-                try:
-                    with open("guild_data.json", "r") as file:
-                        guild_data = json.load(file)
-                        server_id = str(member.guild.id)
-                        notification_channel_id = guild_data[server_id]["notifications_channel_id"]
-                        notification_channel = client.get_channel(notification_channel_id)
+            if len(members_in_channel) == 1:  # User is alone
+                if member.id not in guild_data[guild_id].get("excluded_users", []):
+                    # Get the notification period (in seconds)
+                    period = guild_data[guild_id].get("notifications_period", 300)  # Default to 5 minutes (300 seconds)
+                    # Start a timer for the user
+                    alone_timers[(member.guild.id, member.id)] = client.loop.create_task(
+                        _send_alone_notification(member, voice_channel, guild_data, period)
+                    )
 
-                except FileNotFoundError:
-                    await interaction.response.send_message(
-                        "The guild data file does not exist. Please run the bot to generate it.", ephemeral=True)
-                    return
+        elif after.channel is not None and len(after.channel.members) > 1:  # Someone joined the channel
+            # Iterate through the timers to find any timers for users in the *same* channel
+            timers_to_cancel = []
+            for (guild_id_timer, user_id_timer), task in alone_timers.items():
+                if guild_id_timer == member.guild.id:  # Check if it's the same guild
+                    channel = client.get_channel(after.channel.id)  # Get the channel object
+                    if channel is not None and any(
+                        user_id_timer == other_member.id for other_member in channel.members
+                    ):  # Check if the correct user is in the channel
+                        timers_to_cancel.append((guild_id_timer, user_id_timer))  # Add the timer to cancel
 
-                if notification_channel is not None:
-                    await notification_channel.send(f"{member.mention} has joined {voice_channel.name} and is all alone! 🥺")
-                else:
-                    print(f"Error: Notification channel is not set yet, please se it using the /set_notifications_channel command")
+            for key in timers_to_cancel:
+                if key in alone_timers:
+                    alone_timers[key].cancel()
+                    del alone_timers[key]
+                    print(
+                        f"Timer cancelled for user in {after.channel.name} (someone else joined)."
+                    )  # More descriptive message
 
+        elif before.channel is not None and after.channel is None:  # User left a voice channel
+            if (member.guild.id, member.id) in alone_timers:
+                # Cancel the timer if it exists
+                alone_timers[(member.guild.id, member.id)].cancel()
+                del alone_timers[(member.guild.id, member.id)]
+
+        elif before.channel is not None and after.channel is not None and before.channel != after.channel: # User switched voice channels
+           if (member.guild.id, member.id) in alone_timers:
+                # Cancel the timer if it exists
+                alone_timers[(member.guild.id, member.id)].cancel()
+                del alone_timers[(member.guild.id, member.id)]
+
+        elif before.channel is not None and after.channel is not None and len(before.channel.members) == 0: # Everyone left the channel
+           if (member.guild.id, member.id) in alone_timers:
+                # Cancel the timer if it exists
+                alone_timers[(member.guild.id, member.id)].cancel()
+                del alone_timers[(member.guild.id, member.id)]
 
 
 # Slash command to get a channel ID by its name
@@ -224,7 +257,6 @@ async def _add_guild_data(guild, guild_data): # New function to add data
 
 
 async def _update_channel_lists(guild):
-
 
     guild_data = load_guild_data()  # Load data FIRST
     guild_id = str(guild.id)
@@ -380,6 +412,51 @@ async def resume_notifications(interaction: discord.Interaction):
 
 
 
+
+
+async def _send_alone_notification(member, voice_channel, guild_data, period): # Added period parameter
+    await asyncio.sleep(period)  # Wait for the specified period
+
+    if len(voice_channel.members) == 1:  # Double-check if the user is still alone
+        notification_channel = None
+        guild_id = str(member.guild.id)
+        try:
+            notification_channel_id = guild_data[guild_id]["notifications_channel_id"]
+            notification_channel = client.get_channel(int(notification_channel_id)) # Convert to int
+
+        except (KeyError, ValueError, TypeError): # Handle potential errors
+            print(f"Error: Notification channel not set or invalid for guild {member.guild.name}")
+            return # Exit early
+
+        if notification_channel:
+            await notification_channel.send(f"{member.mention} has been alone in {voice_channel.name} for {int(period/60)} minutes! 🥺") # Show minutes in notification
+        else:
+            print(f"Error: Notification channel not found for guild {member.guild.name}")
+    del alone_timers[(member.guild.id, member.id)]  # Remove the timer after notification (or if user is no longer alone)
+
+
+@client.tree.command(name="set_notifications_period", description="Set the time period (in minutes) before sending alone notifications.")
+@app_commands.describe(minutes="The time period in minutes.")
+async def set_notifications_period(interaction: discord.Interaction, minutes: int):
+    if minutes <= 0:
+        await interaction.response.send_message("The time period must be greater than 0.", ephemeral=True)
+        return
+
+    guild_data = load_guild_data()
+    guild_id = str(interaction.guild.id)
+
+    if guild_id not in guild_data:
+        guild_data[guild_id] = {}
+
+    guild_data[guild_id]["notifications_period"] = minutes * 60   # Store period in seconds
+    await save_guild_data(guild_data)
+    await interaction.response.send_message(f"Notifications period set to {minutes} minutes.", ephemeral=True)
+
+    #Restart any running timers for the new period
+    for key, task in alone_timers.copy().items(): # Iterate over a copy to avoid issues with modifying the dictionary during iteration
+        if key[0] == interaction.guild.id: # Check if the timer is for the current guild
+            task.cancel()
+            del alone_timers[key]
 
 
 # Run the bot
