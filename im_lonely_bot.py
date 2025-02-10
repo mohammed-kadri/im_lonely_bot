@@ -3,12 +3,16 @@ import json
 import asyncio
 from discord import app_commands
 from discord.ext import commands
+from dotenv import load_dotenv
+
 
 # set time before sensing notification
 # try saving data in local noSQL database instead of json
 notification_channels = {}
 alone_timers = {}  # Dictionary to store timers for alone users
 
+load_dotenv()
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 DEFAULT_CHANNEL_NAME = "general"  # Set the default channel name
 
@@ -139,38 +143,42 @@ async def on_voice_state_update(member, before, after):
                         _send_alone_notification(member, voice_channel, guild_data, period)
                     )
 
-        elif after.channel is not None and len(after.channel.members) > 1:  # Someone joined the channel
-            # Iterate through the timers to find any timers for users in the *same* channel
-            timers_to_cancel = []
-            for (guild_id_timer, user_id_timer), task in alone_timers.items():
-                if guild_id_timer == member.guild.id:  # Check if it's the same guild
-                    channel = client.get_channel(after.channel.id)  # Get the channel object
-                    if channel is not None and any(
-                        user_id_timer == other_member.id for other_member in channel.members
-                    ):  # Check if the correct user is in the channel
-                        timers_to_cancel.append((guild_id_timer, user_id_timer))  # Add the timer to cancel
+            elif after.channel is not None and len(after.channel.members) > 1:  # Someone joined the channel
+                # Iterate through the timers to find any timers for users in the *same* channel
+                print("someone new joined the channel")
+                timers_to_cancel = []
+                for (guild_id_timer, user_id_timer), task in alone_timers.items():
+                    if guild_id_timer == member.guild.id:  # Check if it's the same guild
+                        channel = client.get_channel(after.channel.id)  # Get the channel object
+                        if channel is not None and any(
+                            user_id_timer == other_member.id for other_member in channel.members
+                        ):  # Check if the correct user is in the channel
+                            timers_to_cancel.append((guild_id_timer, user_id_timer))  # Add the timer to cancel
 
-            for key in timers_to_cancel:
-                if key in alone_timers:
-                    alone_timers[key].cancel()
-                    del alone_timers[key]
-                    print(
-                        f"Timer cancelled for user in {after.channel.name} (someone else joined)."
-                    )  # More descriptive message
+                for key in timers_to_cancel:
+                    if key in alone_timers:
+                        alone_timers[key].cancel()
+                        del alone_timers[key]
+                        print(
+                            f"Timer cancelled for user in {after.channel.name} (someone else joined)."
+                        )  # More descriptive message
 
         elif before.channel is not None and after.channel is None:  # User left a voice channel
+            print("user left a voice channel")
             if (member.guild.id, member.id) in alone_timers:
                 # Cancel the timer if it exists
                 alone_timers[(member.guild.id, member.id)].cancel()
                 del alone_timers[(member.guild.id, member.id)]
 
         elif before.channel is not None and after.channel is not None and before.channel != after.channel: # User switched voice channels
+           print("user switched voice channels")
            if (member.guild.id, member.id) in alone_timers:
                 # Cancel the timer if it exists
                 alone_timers[(member.guild.id, member.id)].cancel()
                 del alone_timers[(member.guild.id, member.id)]
 
         elif before.channel is not None and after.channel is not None and len(before.channel.members) == 0: # Everyone left the channel
+           print("everyone left the channel")
            if (member.guild.id, member.id) in alone_timers:
                 # Cancel the timer if it exists
                 alone_timers[(member.guild.id, member.id)].cancel()
@@ -460,4 +468,4 @@ async def set_notifications_period(interaction: discord.Interaction, minutes: in
 
 
 # Run the bot
-client.run("Token")
+client.run(DISCORD_TOKEN)
