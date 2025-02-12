@@ -1,6 +1,6 @@
 # Voice Channel Alone Notifier Bot
 
-This Discord bot enhances voice channel management by notifying a designated channel when a user is alone in a voice channel for a configurable time period.  It helps server admins and community members keep track of users who might need assistance or company.
+This Discord bot enhances voice channel management by notifying a designated channel when a user is alone in a voice channel for a configurable time period.  It helps server admins and community members keep track of users who might need company.
 
 ## Features
 
@@ -21,10 +21,9 @@ This Discord bot enhances voice channel management by notifying a designated cha
 
 ## Setup
 
-1.  **Clone the repository:** `git clone https://github.com/your-username/your-bot-repo.git` (Replace with your actual repo URL)
-2.  **Install dependencies:** `pip install -r requirements.txt`
+1.  **Clone the repository:** `git clone https://github.com/mohammed-kadri/im_lonely_bot`
 3.  **Set environment variables:** Create a `.env` file in the project directory and set the `DISCORD_TOKEN` variable with your bot's token.  *Do not commit this file to your repository.*
-4.  **Run the bot:** `python your_bot_file.py` (Replace with your bot's main file name)
+4.  **Run the bot:** `im_lonely_bot.py`
 
 ## Deployment
 
@@ -38,20 +37,8 @@ This bot is designed to be deployed on a server environment.  A recommended appr
 4.  Use `tmux` or `screen` to create a persistent session.
 5.  Run your bot within the `tmux` or `screen` session.
 
-For more detailed deployment instructions and best practices, refer to the [deployment guide](link-to-your-deployment-guide). (Add a link to your detailed guide if you have one.)
-
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request if you'd like to contribute to the project.
 
-## License
 
-(Optional) Specify the license under which your bot's code is distributed.  For example:  MIT License
-
-## Credits
-
-(Optional) Give credit to any libraries, resources, or individuals that helped you create the bot.
-
-## Support
-
-(Optional) Provide a link to your support server or contact information.
