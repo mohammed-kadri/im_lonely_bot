@@ -18,6 +18,8 @@ This Discord bot enhances voice channel management by notifying a designated cha
 *   `/exclude_user <user>`: Excludes a user from triggering alone notifications.
 *   `/include_user <user>`: Includes a user in triggering alone notifications.
 *   `/set_notifications_channel <channel_name>`: Sets the channel where alone notifications are sent.
+*   `/help`: Display available commands and their description.
+
 
 ## Setup
 
