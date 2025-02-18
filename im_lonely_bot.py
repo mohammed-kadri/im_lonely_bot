@@ -468,5 +468,27 @@ async def set_notifications_period(interaction: discord.Interaction, minutes: in
             del alone_timers[key]
 
 
+
+@client.tree.command(name="help", description="List all available commands and their descriptions.")
+async def help_command(interaction: discord.Interaction):
+    commands_list = [
+        {"name": "/set_notifications_channel <channel_name>", "description": "Sets the channel where alone notifications are sent."},
+        {"name": "/set_notifications_channel <channel_name>",
+         "description": "Sets the channel where alone notifications are sent."},
+        {"name": "/exclude_user <user>", "description": "Excludes a user from triggering alone notifications."},
+        {"name": "/include_user <user>", "description": "Includes a user in triggering alone notifications."},
+        {"name": "/pause_notifications", "description": "Pauses alone notifications for the server."},
+        {"name": "/resume_notifications", "description": "Resumes alone notifications for the server."},
+    ]
+
+    help_message = "**Available Commands:**\n\n"
+    for command in commands_list:
+        help_message += f"**{command['name']}**: {command['description']}\n"
+
+    await interaction.response.send_message(help_message, ephemeral=True)
+
+
+
+
 # Run the bot
 client.run(DISCORD_TOKEN)
